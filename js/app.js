@@ -3997,8 +3997,17 @@ const App = {
     }
     const modalTitle = document.getElementById('previewDokumenTitle');
     const modalImg = document.getElementById('imgDokumenFull');
+    const btnTab = document.getElementById('btnBukaDokumenTab');
     if (modalTitle) modalTitle.textContent = title || "Lihat Dokumen";
     if (modalImg) modalImg.src = imageUrl;
+    if (btnTab) {
+      if (imageUrl && imageUrl.startsWith('http')) {
+        btnTab.href = imageUrl;
+        btnTab.style.display = 'inline-flex';
+      } else {
+        btnTab.style.display = 'none';
+      }
+    }
     this.openModal('modalPreviewDokumen');
   },
 
@@ -4017,6 +4026,14 @@ const App = {
       resident.fotoKk = compressed;
       DB.save(this.data);
       this.renderWargaProfile();
+
+      // Sync direct ke Google Sheets & Google Drive
+      if (window.CloudSync && typeof window.CloudSync.saveResidentDirect === 'function') {
+        const success = await window.CloudSync.saveResidentDirect(resident);
+        if (success) {
+          this.renderWargaProfile();
+        }
+      }
       alert("✅ Foto/Scan Kartu Keluarga (KK) berhasil diunggah!");
     } catch (err) {
       alert("Gagal mengunggah foto KK: " + err.message);
@@ -4029,6 +4046,10 @@ const App = {
     if (!resident) return;
     resident.fotoKk = "";
     DB.save(this.data);
+    // Sync direct to Google Sheets
+    if (window.CloudSync && typeof window.CloudSync.saveResidentDirect === 'function') {
+      window.CloudSync.saveResidentDirect(resident);
+    }
     this.renderWargaProfile();
     alert("Foto KK berhasil dihapus.");
   },
@@ -4167,15 +4188,19 @@ const App = {
     resident.jumlahAnggota = resident.familyMembers.length;
 
     DB.save(this.data);
-    // Sync updated resident (including familyMembers) to Google Sheets
-    if (window.CloudSync && typeof window.CloudSync.saveResidentDirect === 'function') {
-      window.CloudSync.saveResidentDirect(resident);
-    }
-
     this.closeModal('modalAnggotaKeluarga');
     this.renderWargaProfile();
     this.renderResidents();
     alert("✅ Data anggota keluarga berhasil disimpan!");
+
+    // Sync direct ke Google Sheets & Google Drive
+    if (window.CloudSync && typeof window.CloudSync.saveResidentDirect === 'function') {
+      const success = await window.CloudSync.saveResidentDirect(resident);
+      if (success) {
+        this.renderWargaProfile();
+        this.renderResidents();
+      }
+    }
   },
 
   deleteFamilyMember(memberId) {
