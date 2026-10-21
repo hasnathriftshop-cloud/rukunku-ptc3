@@ -229,7 +229,7 @@ function ensureSheetsExist() {
 
 function getHeadersForSheet(name) {
   if (name === SHEET_NAMES.WARGA) {
-    return ['ID', 'Nama Kepala Keluarga', 'NIK', 'No KK', 'Blok', 'No Rumah', 'Alamat', 'No WhatsApp', 'Jumlah Jiwa', 'Status Hunian', 'Pekerjaan', 'Status Aktif', 'Tanggal Masuk', 'Avatar Bg', 'Password', 'Anggota Keluarga (JSON)'];
+    return ['ID', 'Nama Kepala Keluarga', 'NIK', 'No KK', 'Blok', 'No Rumah', 'Alamat', 'No WhatsApp', 'Jumlah Jiwa', 'Status Hunian', 'Pekerjaan', 'Status Aktif', 'Tanggal Masuk', 'Avatar Bg', 'Password', 'Anggota Keluarga (JSON)', 'Foto KK (URL Drive)'];
   } else if (name === SHEET_NAMES.TRANSAKSI) {
     return ['ID Transaksi', 'Tanggal', 'Waktu', 'Jenis', 'Kategori', 'Judul Transaksi', 'Keterangan', 'ID Warga', 'Blok / Alamat', 'Nominal (Rp)', 'Metode Bayar', 'Status', 'No Kwitansi', 'Pencatat'];
   } else if (name === SHEET_NAMES.IURAN) {
@@ -317,7 +317,7 @@ function fetchAllDataFromSheets() {
   const residentsSheet = activeSS.getSheetByName(SHEET_NAMES.WARGA);
   const residents = [];
   if (residentsSheet && residentsSheet.getLastRow() > 1) {
-    const maxCols = Math.max(16, residentsSheet.getLastColumn());
+    const maxCols = Math.max(17, residentsSheet.getLastColumn());
     const rRows = residentsSheet.getRange(2, 1, residentsSheet.getLastRow() - 1, maxCols).getValues();
     rRows.forEach(row => {
       if (row[0]) {
@@ -360,7 +360,8 @@ function fetchAllDataFromSheets() {
           tanggalMasuk: formatDate(row[12]),
           avatarBg: String(row[13] || 'bg-pastel-teal'),
           password: String(row[14] || '123456'),
-          familyMembers: familyMembers
+          familyMembers: familyMembers,
+          fotoKk: String(row[16] || '').trim()
         });
       }
     });
@@ -521,7 +522,7 @@ function saveAllDataToSheets(data) {
       
       const existingMap = new Map();
       if (sheet.getLastRow() > 1) {
-        const existingData = sheet.getRange(2, 1, sheet.getLastRow() - 1, 16).getValues();
+        const existingData = sheet.getRange(2, 1, sheet.getLastRow() - 1, 17).getValues();
         existingData.forEach(row => {
           const id = String(row[0] || '').trim();
           if (id) existingMap.set(id, row);
@@ -532,6 +533,25 @@ function saveAllDataToSheets(data) {
       data.residents.forEach(r => {
         const id = String(r.id || '').trim();
         if (id) {
+          // Upload foto KK ke Drive jika masih Base64
+          let fotoKkUrl = r.fotoKk || '';
+          if (fotoKkUrl && fotoKkUrl.startsWith('data:image/')) {
+            const cleanNama = (r.nama || 'warga').replace(/[^a-zA-Z0-9]/g, '_');
+            fotoKkUrl = uploadBase64ToDrive(fotoKkUrl, 'KK_' + cleanNama + '_' + (r.noKk || r.id), 'Kartu Keluarga');
+            r.fotoKk = fotoKkUrl;
+          }
+
+          // Upload foto KTP setiap anggota keluarga ke Drive jika masih Base64
+          if (r.familyMembers && Array.isArray(r.familyMembers)) {
+            r.familyMembers.forEach((m, idx) => {
+              if (m.fotoKtp && m.fotoKtp.startsWith('data:image/')) {
+                const cleanMemberNama = (m.nama || ('anggota_' + idx)).replace(/[^a-zA-Z0-9]/g, '_');
+                const ktpUrl = uploadBase64ToDrive(m.fotoKtp, 'KTP_' + cleanMemberNama + '_' + (m.nik || m.id), 'Foto KTP');
+                m.fotoKtp = ktpUrl;
+              }
+            });
+          }
+
           const row = [
             id,
             r.nama || '',
@@ -548,7 +568,8 @@ function saveAllDataToSheets(data) {
             r.tanggalMasuk || '',
             r.avatarBg || 'bg-pastel-teal',
             r.password || '123456',
-            JSON.stringify(r.familyMembers || [])
+            JSON.stringify(r.familyMembers || []),
+            fotoKkUrl || ''
           ];
           existingMap.set(id, row);
         }
@@ -557,9 +578,9 @@ function saveAllDataToSheets(data) {
       const combinedRows = Array.from(existingMap.values());
       if (combinedRows.length > 0) {
         if (sheet.getLastRow() > 1) {
-          sheet.getRange(2, 1, sheet.getLastRow() - 1, 16).clearContent();
+          sheet.getRange(2, 1, sheet.getLastRow() - 1, 17).clearContent();
         }
-        sheet.getRange(2, 1, combinedRows.length, 16).setValues(combinedRows);
+        sheet.getRange(2, 1, combinedRows.length, 17).setValues(combinedRows);
       }
     }
   }
@@ -781,6 +802,25 @@ function upsertResidentRow(resident) {
   if (!sheet) return;
   ensureSheetHeadersOnly(sheet, SHEET_NAMES.WARGA);
   
+  // 1. Upload foto KK ke Drive jika masih Base64
+  let fotoKkUrl = resident.fotoKk || '';
+  if (fotoKkUrl && fotoKkUrl.startsWith('data:image/')) {
+    const cleanNama = (resident.nama || 'warga').replace(/[^a-zA-Z0-9]/g, '_');
+    fotoKkUrl = uploadBase64ToDrive(fotoKkUrl, 'KK_' + cleanNama + '_' + (resident.noKk || resident.id), 'Kartu Keluarga');
+    resident.fotoKk = fotoKkUrl;
+  }
+
+  // 2. Upload foto KTP setiap anggota keluarga ke Drive jika masih Base64
+  if (resident.familyMembers && Array.isArray(resident.familyMembers)) {
+    resident.familyMembers.forEach((m, idx) => {
+      if (m.fotoKtp && m.fotoKtp.startsWith('data:image/')) {
+        const cleanMemberNama = (m.nama || ('anggota_' + idx)).replace(/[^a-zA-Z0-9]/g, '_');
+        const ktpUrl = uploadBase64ToDrive(m.fotoKtp, 'KTP_' + cleanMemberNama + '_' + (m.nik || m.id), 'Foto KTP');
+        m.fotoKtp = ktpUrl;
+      }
+    });
+  }
+
   const lastRow = sheet.getLastRow();
   let foundRow = -1;
   if (lastRow > 1) {
@@ -809,7 +849,8 @@ function upsertResidentRow(resident) {
     resident.tanggalMasuk || '',
     resident.avatarBg || 'bg-pastel-teal',
     resident.password || '123456',
-    JSON.stringify(resident.familyMembers || [])
+    JSON.stringify(resident.familyMembers || []),
+    fotoKkUrl || ''
   ];
 
   if (foundRow > 1) {
@@ -902,6 +943,14 @@ function upsertSetoranRow(s) {
   if (!sheet) return;
   ensureSheetHeadersOnly(sheet, SHEET_NAMES.SETORAN);
 
+  // Upload foto bukti setoran jika masih Base64
+  let buktiFotoUrl = s.buktiFoto || '';
+  if (buktiFotoUrl && buktiFotoUrl.startsWith('data:image/')) {
+    const cleanCollector = (s.collectorName || 'petugas').replace(/[^a-zA-Z0-9]/g, '_');
+    buktiFotoUrl = uploadBase64ToDrive(buktiFotoUrl, 'Setoran_' + cleanCollector + '_' + s.id, 'Bukti Setoran Kas');
+    s.buktiFoto = buktiFotoUrl;
+  }
+
   const lastRow = sheet.getLastRow();
   let foundRow = -1;
   if (lastRow > 1) {
@@ -929,7 +978,7 @@ function upsertSetoranRow(s) {
     s.catatan || '',
     s.tanggalDiterima || '',
     s.diterimaOleh || '',
-    s.buktiFoto || ''
+    buktiFotoUrl || ''
   ];
 
   if (foundRow > 1) {
@@ -1010,4 +1059,80 @@ function formatDate(val) {
 function initializeAllSheets() {
   ensureSheetsExist();
   return "Inisialisasi 7 sheet RukunKu selesai.";
+}
+
+// ============================================================================
+// GOOGLE DRIVE INTEGRATION (Penyimpanan Berkas Foto KTP, KK, & Bukti Setoran)
+// ============================================================================
+
+/**
+ * Menyimpan data Base64 gambar ke folder Google Drive secara otomatis
+ * Mengembalikan URL gambar langsung yang dapat dibuka & dipratinjau di webapp
+ */
+function uploadBase64ToDrive(base64Str, fileName, subFolderName) {
+  if (!base64Str || typeof base64Str !== 'string') return '';
+  
+  // Jika sudah berupa link URL (misal Google Drive link, Cloudinary, atau Web URL), langsung gunakan
+  if (base64Str.startsWith('http://') || base64Str.startsWith('https://')) {
+    return base64Str;
+  }
+  
+  // Hanya proses jika berformat Data URL Base64
+  if (!base64Str.startsWith('data:image/')) {
+    return '';
+  }
+
+  try {
+    const mainFolderName = "RukunKu - Dokumen Warga";
+    const mainFolder = getOrCreateDriveFolder(mainFolderName);
+    let targetFolder = mainFolder;
+    if (subFolderName) {
+      targetFolder = getOrCreateSubFolder(mainFolder, subFolderName);
+    }
+
+    const matches = base64Str.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return '';
+    }
+
+    const contentType = matches[1];
+    const base64Data = matches[2];
+    const decodedBytes = Utilities.base64Decode(base64Data);
+    
+    // Tentukan ekstensi file
+    let ext = 'jpg';
+    if (contentType.includes('png')) ext = 'png';
+    else if (contentType.includes('webp')) ext = 'webp';
+
+    const fullFileName = (fileName || ('dokumen_' + Date.now())) + '.' + ext;
+    const blob = Utilities.newBlob(decodedBytes, contentType, fullFileName);
+    const file = targetFolder.createFile(blob);
+
+    // Buka akses file agar dapat dipratinjau di webapp RukunKu
+    try {
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    } catch(e) {}
+
+    // Mengembalikan URL view langsung berkecepatan tinggi dari Google CDN
+    return 'https://lh3.googleusercontent.com/d/' + file.getId();
+  } catch (err) {
+    Logger.log("Gagal upload file ke Google Drive: " + err);
+    return '';
+  }
+}
+
+function getOrCreateDriveFolder(folderName) {
+  const folders = DriveApp.getFoldersByName(folderName);
+  if (folders.hasNext()) {
+    return folders.next();
+  }
+  return DriveApp.createFolder(folderName);
+}
+
+function getOrCreateSubFolder(parentFolder, subFolderName) {
+  const subFolders = parentFolder.getFoldersByName(subFolderName);
+  if (subFolders.hasNext()) {
+    return subFolders.next();
+  }
+  return parentFolder.createFolder(subFolderName);
 }
