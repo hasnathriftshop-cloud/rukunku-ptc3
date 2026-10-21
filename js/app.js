@@ -95,12 +95,14 @@ const App = {
 
     const screenAuth = document.getElementById('screenAuth');
     const mainLayout = document.getElementById('appMainLayout');
+    const bottomNav = document.querySelector('.bottom-nav');
 
     // Requirement 1: If user is authenticated in this session, show app layout;
     // Otherwise, show Login Screen prominently as the first thing user sees!
     if (AppState.currentUser) {
       if (screenAuth) screenAuth.style.display = 'none';
       if (mainLayout) mainLayout.style.display = 'flex';
+      if (bottomNav) bottomNav.style.display = '';
       this.renderRoleUI();
       this.renderChart();
       this.renderDashboard();
@@ -114,6 +116,11 @@ const App = {
       this.renderFinancialReport();
       this.updateNotificationBadge();
     } else {
+      // Pastikan semua modal overlay tertutup saat pertama kali membuka layar login
+      document.querySelectorAll('.modal-overlay').forEach(modal => {
+        modal.classList.remove('active');
+      });
+      if (bottomNav) bottomNav.style.display = 'none';
       if (screenAuth) screenAuth.style.display = 'flex';
       if (mainLayout) mainLayout.style.display = 'none';
       this.switchAuthTab('login');
@@ -909,14 +916,14 @@ const App = {
     const categories = this.data.categories || { masuk: [], keluar: [] };
 
     let html = `<option value="all">Semua Kategori Transaksi</option>`;
-    if (categories.masuk && categories.masuk.length > 0) {
+    if (Array.isArray(categories.masuk) && categories.masuk.length > 0) {
       html += `<optgroup label="── Kas Masuk (Pemasukan) ──">`;
       categories.masuk.forEach(c => {
         html += `<option value="${c}" ${c === curVal ? 'selected' : ''}>${c}</option>`;
       });
       html += `</optgroup>`;
     }
-    if (categories.keluar && categories.keluar.length > 0) {
+    if (Array.isArray(categories.keluar) && categories.keluar.length > 0) {
       html += `<optgroup label="── Kas Keluar (Pengeluaran) ──">`;
       categories.keluar.forEach(c => {
         html += `<option value="${c}" ${c === curVal ? 'selected' : ''}>${c}</option>`;
@@ -949,6 +956,14 @@ const App = {
   // Auth: Login, Logout & Registrasi Warga (Fixing Points 2 & 3)
   // =========================================================================
   openAuthModal(defaultTab = 'login', defaultRole = 'pengurus') {
+    // Tutup paksa SEMUA modal overlay jika ada yang aktif
+    document.querySelectorAll('.modal-overlay').forEach(modal => {
+      modal.classList.remove('active');
+    });
+
+    const bottomNav = document.querySelector('.bottom-nav');
+    if (bottomNav) bottomNav.style.display = 'none';
+
     const screenAuth = document.getElementById('screenAuth');
     const mainLayout = document.getElementById('appMainLayout');
     if (mainLayout) mainLayout.style.display = 'none';
@@ -1102,6 +1117,8 @@ const App = {
       return;
     }
 
+    const cleanPhoneInput = username.startsWith('0') ? '62' + username.slice(1) : (username.startsWith('+62') ? username.slice(1) : username);
+
     if (role === 'pengurus') {
       const admin = this.data.adminUser || { username: 'admin', password: '123' };
       const collectors = this.data.collectors || [];
@@ -1110,15 +1127,20 @@ const App = {
       if ((username.toLowerCase() === (admin.username || 'admin').toLowerCase()) && (pass === (admin.password || '123'))) {
         const user = {
           role: 'pengurus',
-          name: this.data.settings.ketuaRt || 'Pengurus RT',
+          name: this.data.settings?.ketuaRt || 'Pengurus RT',
           username: admin.username
         };
         this.setAuthSession(user);
 
+        // Tutup paksa semua modal overlay jika ada yang tertinggal
+        document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
+
         const screenAuth = document.getElementById('screenAuth');
         const mainLayout = document.getElementById('appMainLayout');
+        const bottomNav = document.querySelector('.bottom-nav');
         if (screenAuth) screenAuth.style.display = 'none';
         if (mainLayout) mainLayout.style.display = 'flex';
+        if (bottomNav) bottomNav.style.display = '';
 
         this.renderRoleUI();
         this.renderChart();
@@ -1138,9 +1160,9 @@ const App = {
 
       // 2. Check if login as Petugas Penagih Blok
       const collector = collectors.find(c => 
-        c.username.toLowerCase() === username.toLowerCase() ||
-        c.phone === username ||
-        c.nama.toLowerCase() === username.toLowerCase()
+        (c.username && c.username.toLowerCase() === username.toLowerCase()) ||
+        (c.phone && (String(c.phone).replace(/^'/, '') === username || String(c.phone).replace(/^'/, '') === cleanPhoneInput)) ||
+        (c.nama && c.nama.toLowerCase() === username.toLowerCase())
       );
 
       if (collector) {
@@ -1155,15 +1177,20 @@ const App = {
           collectorId: collector.id,
           username: collector.username,
           blokTugas: collector.blokTugas,
-          assignedBlocks: collector.assignedBlocks || [collector.blokTugas],
-          phone: collector.phone
+          assignedBlocks: Array.isArray(collector.assignedBlocks) ? collector.assignedBlocks : [collector.blokTugas],
+          phone: String(collector.phone || '')
         };
         this.setAuthSession(user);
 
+        // Tutup paksa semua modal overlay jika ada yang tertinggal
+        document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
+
         const screenAuth = document.getElementById('screenAuth');
         const mainLayout = document.getElementById('appMainLayout');
+        const bottomNav = document.querySelector('.bottom-nav');
         if (screenAuth) screenAuth.style.display = 'none';
         if (mainLayout) mainLayout.style.display = 'flex';
+        if (bottomNav) bottomNav.style.display = '';
 
         this.renderRoleUI();
         this.renderResidents();
@@ -1180,10 +1207,23 @@ const App = {
       alert("Username atau password Pengurus / Petugas tidak ditemukan! Silakan periksa kembali akun Anda.");
       return;
     } else {
-      // Login Warga
-      const resident = (this.data.residents || []).find(r => 
-        (r.nik === username || r.phone === username || r.nama.toLowerCase() === username.toLowerCase() || (r.username && r.username.toLowerCase() === username.toLowerCase()))
-      );
+      // Login Warga (Cari NIK, Phone dengan normalisasi 08 <-> 628, Nama, atau Username)
+      const resident = (this.data.residents || []).find(r => {
+        const rNik = r.nik ? String(r.nik).replace(/^'/, '').trim() : '';
+        const rPhone = r.phone ? String(r.phone).replace(/^'/, '').trim() : '';
+        const rNoKk = r.noKk ? String(r.noKk).replace(/^'/, '').trim() : '';
+        const rNama = (r.nama || '').trim().toLowerCase();
+        const rUser = (r.username || '').trim().toLowerCase();
+        const inputLower = username.toLowerCase();
+
+        return (
+          (rNik && rNik === username) ||
+          (rPhone && (rPhone === username || rPhone === cleanPhoneInput)) ||
+          (rNama && rNama === inputLower) ||
+          (rUser && rUser === inputLower) ||
+          (rNoKk && rNoKk === username)
+        );
+      });
 
       if (!resident) {
         alert("Data warga tidak ditemukan! Silakan periksa kembali NIK atau No WA Anda, atau klik 'Daftar Akun Warga'.");
@@ -1206,10 +1246,15 @@ const App = {
       };
       this.setAuthSession(user);
 
+      // Tutup paksa semua modal overlay jika ada yang tertinggal
+      document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
+
       const screenAuth = document.getElementById('screenAuth');
       const mainLayout = document.getElementById('appMainLayout');
+      const bottomNav = document.querySelector('.bottom-nav');
       if (screenAuth) screenAuth.style.display = 'none';
       if (mainLayout) mainLayout.style.display = 'flex';
+      if (bottomNav) bottomNav.style.display = '';
 
       this.renderRoleUI();
       this.renderDashboard();
@@ -1224,7 +1269,7 @@ const App = {
     if (role === 'pengurus') {
       const user = {
         role: 'pengurus',
-        name: this.data.settings.ketuaRt || 'Pengurus RT',
+        name: this.data.settings?.ketuaRt || 'Pengurus RT',
         username: 'admin'
       };
       this.setAuthSession(user);
@@ -1242,8 +1287,10 @@ const App = {
     }
     const screenAuth = document.getElementById('screenAuth');
     const mainLayout = document.getElementById('appMainLayout');
+    const bottomNav = document.querySelector('.bottom-nav');
     if (screenAuth) screenAuth.style.display = 'none';
     if (mainLayout) mainLayout.style.display = 'flex';
+    if (bottomNav) bottomNav.style.display = '';
     this.switchTab('dashboard');
   },
 
@@ -1265,6 +1312,15 @@ const App = {
       AppState.currentResidentId = null;
       this.data = DB.load(); // Refresh data dari storage
 
+      // PENTING: Tutup SEMUA modal overlay yang mungkin masih terbuka saat logout
+      document.querySelectorAll('.modal-overlay').forEach(modal => {
+        modal.classList.remove('active');
+      });
+
+      // Sembunyikan bottom navigation mobile saat di layar login
+      const bottomNav = document.querySelector('.bottom-nav');
+      if (bottomNav) bottomNav.style.display = 'none';
+
       const screenAuth = document.getElementById('screenAuth');
       const mainLayout = document.getElementById('appMainLayout');
       if (mainLayout) mainLayout.style.display = 'none';
@@ -1273,6 +1329,7 @@ const App = {
       this.switchAuthTab('login');
       this.selectAuthRole('pengurus');
     }
+  },
   },
 
   registerWargaSubmit(event) {
@@ -1386,8 +1443,10 @@ const App = {
 
     const screenAuth = document.getElementById('screenAuth');
     const mainLayout = document.getElementById('appMainLayout');
+    const bottomNav = document.querySelector('.bottom-nav');
     if (screenAuth) screenAuth.style.display = 'none';
     if (mainLayout) mainLayout.style.display = 'flex';
+    if (bottomNav) bottomNav.style.display = '';
 
     this.renderRoleUI();
     this.renderResidents();
@@ -3328,7 +3387,8 @@ const App = {
         const resident = residents.find(r => r.id === col.residentId) ||
                          residents.find(r => r.nama.toLowerCase() === col.nama.toLowerCase());
         const alamatWarga = resident ? `${resident.blok} No. ${resident.nomorRumah || '-'}` : (col.blokAsal || '-');
-        const phoneFormatted = col.phone.startsWith('62') ? '0' + col.phone.slice(2) : col.phone;
+        const pStr = String(col.phone || '');
+        const phoneFormatted = pStr.startsWith('62') ? '0' + pStr.slice(2) : pStr;
 
         tableRows += `
           <tr>
