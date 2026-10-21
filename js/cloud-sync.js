@@ -5,7 +5,7 @@
 
 const CloudSync = {
   // URL Web App Google Apps Script default lingkungan RT 05 / RW 02 Perum Tiara Candi 3
-  DEFAULT_GAS_URL: 'https://script.google.com/macros/s/AKfycbwCPlpqo5DMqRgnz1QCksWw6M3tBPwCU0-LX0iDZnZcluMN6CDo6C6qRCSOdJIfFXFJYg/exec',
+  DEFAULT_GAS_URL: 'https://script.google.com/macros/s/AKfycbzEidTqNbLu_Ep9tR5rCUKZOE5CB7r0yApvtJD5JXtk15AAvuTkRsnRple3cfBPrL4g/exec',
   STORAGE_KEY_URL: 'rukunku_gas_url',
   STORAGE_KEY_LAST_SYNC: 'rukunku_last_sync_time',
   
@@ -232,16 +232,34 @@ const CloudSync = {
             })
           : (currentLocal.residents || []);
 
+        // Pastikan categories memiliki format array yang aman
+        let cleanCategories = currentLocal.categories;
+        if (cloudData.categories && typeof cloudData.categories === 'object') {
+          cleanCategories = {
+            masuk: Array.isArray(cloudData.categories.masuk) ? cloudData.categories.masuk : (currentLocal.categories?.masuk || []),
+            keluar: Array.isArray(cloudData.categories.keluar) ? cloudData.categories.keluar : (currentLocal.categories?.keluar || [])
+          };
+        }
+
+        // Pastikan phone bertipe string dan assignedBlocks bertipe array
+        const cleanCollectors = Array.isArray(cloudData.collectors)
+          ? cloudData.collectors.map(c => ({
+              ...c,
+              phone: String(c.phone || '').replace(/^'/, ''),
+              assignedBlocks: Array.isArray(c.assignedBlocks) ? c.assignedBlocks : [String(c.blokTugas || '')]
+            }))
+          : (currentLocal.collectors || []);
+
         const merged = {
           ...currentLocal,
           settings: cloudData.settings || currentLocal.settings,
           blocks: (cloudData.blocks && Array.isArray(cloudData.blocks) && cloudData.blocks.length > 0) ? cloudData.blocks : currentLocal.blocks,
-          categories: cloudData.categories || currentLocal.categories,
+          categories: cleanCategories,
           residents: residentsToUse,
           transactions: Array.isArray(cloudData.transactions) ? cloudData.transactions : (currentLocal.transactions || []),
           duesMatrix: cloudData.duesMatrix || currentLocal.duesMatrix,
           talangan: Array.isArray(cloudData.talangan) ? cloudData.talangan : (currentLocal.talangan || []),
-          collectors: Array.isArray(cloudData.collectors) ? cloudData.collectors : (currentLocal.collectors || []),
+          collectors: cleanCollectors,
           setoranBlok: Array.isArray(cloudData.setoranBlok) ? cloudData.setoranBlok : (currentLocal.setoranBlok || [])
         };
 
@@ -251,18 +269,31 @@ const CloudSync = {
 
         if (window.App) {
           window.App.data = merged;
-          if (typeof window.App.updateSettingsUI === 'function') window.App.updateSettingsUI();
-          if (typeof window.App.renderBlockOptions === 'function') window.App.renderBlockOptions();
-          if (typeof window.App.renderDashboard === 'function') window.App.renderDashboard();
-          if (typeof window.App.renderResidents === 'function') window.App.renderResidents();
-          if (typeof window.App.renderTransactions === 'function') window.App.renderTransactions();
-          if (typeof window.App.renderDuesMatrix === 'function') window.App.renderDuesMatrix();
-          if (typeof window.App.renderTalangan === 'function') window.App.renderTalangan();
-          if (typeof window.App.renderFinancialReport === 'function') window.App.renderFinancialReport();
-          if (typeof window.App.renderSetoranBlok === 'function') window.App.renderSetoranBlok();
-          if (typeof window.App.renderKelolaPetugasPage === 'function') window.App.renderKelolaPetugasPage();
-          if (typeof window.App.renderPetugasList === 'function') window.App.renderPetugasList();
-          if (typeof window.App.updateNotificationBadge === 'function') window.App.updateNotificationBadge();
+          // Hanya re-render view utama jika user sudah login
+          if (window.AppState && window.AppState.currentUser) {
+            try {
+              if (typeof window.App.updateSettingsUI === 'function') window.App.updateSettingsUI();
+              if (typeof window.App.renderBlockOptions === 'function') window.App.renderBlockOptions();
+              if (typeof window.App.renderDashboard === 'function') window.App.renderDashboard();
+              if (typeof window.App.renderResidents === 'function') window.App.renderResidents();
+              if (typeof window.App.renderTransactions === 'function') window.App.renderTransactions();
+              if (typeof window.App.renderDuesMatrix === 'function') window.App.renderDuesMatrix();
+              if (typeof window.App.renderTalangan === 'function') window.App.renderTalangan();
+              if (typeof window.App.renderFinancialReport === 'function') window.App.renderFinancialReport();
+              if (typeof window.App.renderSetoranBlok === 'function') window.App.renderSetoranBlok();
+              if (typeof window.App.renderKelolaPetugasPage === 'function') window.App.renderKelolaPetugasPage();
+              if (typeof window.App.renderPetugasList === 'function') window.App.renderPetugasList();
+              if (typeof window.App.updateNotificationBadge === 'function') window.App.updateNotificationBadge();
+            } catch (renderErr) {
+              console.warn("[CloudSync] Background render error:", renderErr);
+            }
+          } else {
+            // Jika user masih di halaman login / register, cukup update opsi blok registrasi & judul lingkungan
+            try {
+              if (typeof window.App.updateSettingsUI === 'function') window.App.updateSettingsUI();
+              if (typeof window.App.renderBlockOptions === 'function') window.App.renderBlockOptions();
+            } catch (e) {}
+          }
         }
 
         this.status = 'connected';
