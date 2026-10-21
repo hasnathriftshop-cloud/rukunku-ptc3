@@ -1815,6 +1815,9 @@ textarea.form-control {
   color: #64748b;
   background: transparent;
   cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
   transition: all 0.2s ease;
   text-align: center;
 }
@@ -1843,6 +1846,9 @@ textarea.form-control {
   border-radius: 16px;
   padding: 14px;
   cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
   transition: all 0.2s ease;
   background: #f8fafc;
   display: flex;
@@ -1983,6 +1989,8 @@ textarea.form-control {
   padding: 30px 16px;
   background: radial-gradient(circle at 10% 20%, rgba(20, 136, 120, 0.09) 0%, rgba(248, 250, 252, 0.96) 90%), #f8fafc;
   width: 100%;
+  position: relative;
+  z-index: 1000;
 }
 
 .auth-screen-card {
