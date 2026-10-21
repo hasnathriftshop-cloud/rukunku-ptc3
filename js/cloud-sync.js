@@ -5,7 +5,7 @@
 
 const CloudSync = {
   // URL Web App Google Apps Script default lingkungan RT 05 / RW 02 Perum Tiara Candi 3
-  DEFAULT_GAS_URL: 'https://script.google.com/macros/s/AKfycbzEidTqNbLu_Ep9tR5rCUKZOE5CB7r0yApvtJD5JXtk15AAvuTkRsnRple3cfBPrL4g/exec',
+  DEFAULT_GAS_URL: 'https://script.google.com/macros/s/AKfycbwCPlpqo5DMqRgnz1QCksWw6M3tBPwCU0-LX0iDZnZcluMN6CDo6C6qRCSOdJIfFXFJYg/exec',
   STORAGE_KEY_URL: 'rukunku_gas_url',
   STORAGE_KEY_LAST_SYNC: 'rukunku_last_sync_time',
   
@@ -211,9 +211,23 @@ const CloudSync = {
         const residentsToUse = hasCloudResidents
           ? cloudData.residents.map(cr => {
               const localMatch = (currentLocal.residents || []).find(lr => lr.id === cr.id);
+              
+              // Gabungkan familyMembers agar fotoKtp lokal tidak terhapus jika cloud mengembalikan string kosong
+              const mergedFamily = (cr.familyMembers || []).map((cfm, idx) => {
+                const lfm = (localMatch && localMatch.familyMembers)
+                  ? (localMatch.familyMembers.find(m => m.id === cfm.id) || localMatch.familyMembers[idx])
+                  : null;
+                return {
+                  ...cfm,
+                  fotoKtp: cfm.fotoKtp || (lfm && lfm.fotoKtp ? lfm.fotoKtp : '')
+                };
+              });
+
               return {
                 ...cr,
-                password: cr.password || (localMatch && localMatch.password ? localMatch.password : '123456')
+                password: cr.password || (localMatch && localMatch.password ? localMatch.password : '123456'),
+                fotoKk: cr.fotoKk || (localMatch && localMatch.fotoKk ? localMatch.fotoKk : ''),
+                familyMembers: mergedFamily.length > 0 ? mergedFamily : (cr.familyMembers || (localMatch ? localMatch.familyMembers : []))
               };
             })
           : (currentLocal.residents || []);
@@ -344,6 +358,20 @@ const CloudSync = {
       });
       const json = await res.json();
       if (json && json.status === 'success') {
+        // Jika server mengembalikan resident dengan URL Google Drive, update data lokal segera
+        if (json.resident) {
+          const currentLocal = DB.load();
+          const rIdx = (currentLocal.residents || []).findIndex(r => r.id === json.resident.id);
+          if (rIdx !== -1) {
+            currentLocal.residents[rIdx] = { ...currentLocal.residents[rIdx], ...json.resident };
+            DB.save(currentLocal, { skipSync: true });
+            if (window.App) {
+              window.App.data = currentLocal;
+              if (typeof window.App.renderWargaProfile === 'function') window.App.renderWargaProfile();
+              if (typeof window.App.renderResidents === 'function') window.App.renderResidents();
+            }
+          }
+        }
         this.status = 'connected';
         this.lastSyncTime = new Date().toISOString();
         localStorage.setItem(this.STORAGE_KEY_LAST_SYNC, this.lastSyncTime);
