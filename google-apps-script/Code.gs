@@ -110,12 +110,13 @@ function doPost(e) {
       });
     }
 
-    // 3. Tambah / Edit Data Warga (Langsung & Aman)
+    // 3. Tambah / Edit Data Warga (Langsung & Aman dengan Google Drive)
     if (action === 'saveResident' && payload.resident) {
-      upsertResidentRow(payload.resident);
+      const savedRes = upsertResidentRow(payload.resident);
       return jsonResponse({
         status: 'success',
-        message: 'Data warga berhasil disimpan di Google Sheets.'
+        message: 'Data warga berhasil disimpan di Google Sheets & Google Drive.',
+        resident: savedRes
       });
     }
 
@@ -259,6 +260,11 @@ function formatHeaderRow(sheet, colCount) {
 function ensureSheetHeadersOnly(sheet, name) {
   const headers = getHeadersForSheet(name);
   if (headers.length === 0) return;
+
+  const maxCols = sheet.getMaxColumns();
+  if (maxCols < headers.length) {
+    sheet.insertColumnsAfter(maxCols, headers.length - maxCols);
+  }
   
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(headers);
@@ -858,6 +864,8 @@ function upsertResidentRow(resident) {
   } else {
     sheet.appendRow(row);
   }
+
+  return resident;
 }
 
 /**
@@ -917,6 +925,8 @@ function upsertCollectorRow(col) {
   } else {
     sheet.appendRow(row);
   }
+
+  return resident;
 }
 
 function deleteCollectorRow(collectorId) {
@@ -986,6 +996,8 @@ function upsertSetoranRow(s) {
   } else {
     sheet.appendRow(row);
   }
+
+  return resident;
 }
 
 /**
@@ -1046,6 +1058,8 @@ function upsertTalanganRow(talangan) {
   } else {
     sheet.appendRow(row);
   }
+
+  return resident;
 }
 
 function formatDate(val) {
@@ -1058,7 +1072,27 @@ function formatDate(val) {
 
 function initializeAllSheets() {
   ensureSheetsExist();
-  return "Inisialisasi 7 sheet RukunKu selesai.";
+  try {
+    const mainFolder = getOrCreateDriveFolder("RukunKu - Dokumen Warga");
+    getOrCreateSubFolder(mainFolder, "Kartu Keluarga");
+    getOrCreateSubFolder(mainFolder, "Foto KTP");
+    getOrCreateSubFolder(mainFolder, "Bukti Setoran Kas");
+  } catch(e) {
+    Logger.log("Peringatan Drive: " + e);
+  }
+  return "Inisialisasi 7 sheet RukunKu & Google Drive selesai.";
+}
+
+/**
+ * Jalankan fungsi ini 1 kali di editor Google Apps Script untuk otorisasi Google Drive
+ */
+function testDriveAuthorization() {
+  const mainFolder = getOrCreateDriveFolder("RukunKu - Dokumen Warga");
+  getOrCreateSubFolder(mainFolder, "Kartu Keluarga");
+  getOrCreateSubFolder(mainFolder, "Foto KTP");
+  getOrCreateSubFolder(mainFolder, "Bukti Setoran Kas");
+  Logger.log("✅ Otorisasi Google Drive Aktif! Folder: " + mainFolder.getName());
+  return "Otorisasi Google Drive Berhasil!";
 }
 
 // ============================================================================
@@ -1071,6 +1105,7 @@ function initializeAllSheets() {
  */
 function uploadBase64ToDrive(base64Str, fileName, subFolderName) {
   if (!base64Str || typeof base64Str !== 'string') return '';
+  base64Str = base64Str.trim();
   
   // Jika sudah berupa link URL (misal Google Drive link, Cloudinary, atau Web URL), langsung gunakan
   if (base64Str.startsWith('http://') || base64Str.startsWith('https://')) {
@@ -1090,13 +1125,14 @@ function uploadBase64ToDrive(base64Str, fileName, subFolderName) {
       targetFolder = getOrCreateSubFolder(mainFolder, subFolderName);
     }
 
-    const matches = base64Str.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    const matches = base64Str.match(/^data:([^;]+);base64,([\s\S]+)$/);
     if (!matches || matches.length !== 3) {
+      Logger.log("Format data base64 tidak cocok");
       return '';
     }
 
     const contentType = matches[1];
-    const base64Data = matches[2];
+    const base64Data = matches[2].replace(/\s+/g, '');
     const decodedBytes = Utilities.base64Decode(base64Data);
     
     // Tentukan ekstensi file
@@ -1111,7 +1147,9 @@ function uploadBase64ToDrive(base64Str, fileName, subFolderName) {
     // Buka akses file agar dapat dipratinjau di webapp RukunKu
     try {
       file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    } catch(e) {}
+    } catch(e) {
+      Logger.log("Warning sharing: " + e);
+    }
 
     // Mengembalikan URL view langsung berkecepatan tinggi dari Google CDN
     return 'https://lh3.googleusercontent.com/d/' + file.getId();
