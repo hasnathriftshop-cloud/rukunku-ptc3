@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   
   <!-- Custom Modern Stylesheet -->
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=20261021_02">
 </head>
 <body>
 
@@ -85,6 +85,24 @@
             <button type="submit" class="btn-teal-pill" style="width: 100%; justify-content: center; padding: 13px; font-size: 14px;">
               Masuk ke Sistem
             </button>
+          </div>
+
+          <!-- Bantuan Akun Cepat & Petunjuk Login -->
+          <div style="margin-top: 16px; padding: 12px 14px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; font-size: 12px; color: #475569; line-height: 1.5;">
+            <div style="font-weight: 700; color: #0f766e; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+              <span>💡</span>
+              <span>Petunjuk Akses Akun:</span>
+            </div>
+            <div>• <strong>Pengurus:</strong> Username: <code>admin</code> • Password: <code>123</code></div>
+            <div style="margin-top: 2px;">• <strong>Warga:</strong> Gunakan <strong>NIK</strong> atau <strong>No. WhatsApp</strong> terdaftar.</div>
+            <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
+              <button type="button" class="btn-outline-pill" style="font-size: 11px; padding: 5px 12px; cursor: pointer;" onclick="App.fillDemoLogin('pengurus')">
+                🔑 Isi Akun Pengurus
+              </button>
+              <button type="button" class="btn-outline-pill" style="font-size: 11px; padding: 5px 12px; cursor: pointer;" onclick="App.fillDemoLogin('warga')">
+                👨‍👩‍👧‍👦 Isi Akun Warga
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -1097,7 +1115,11 @@
       <div class="modal-body" style="padding: 16px;">
         <img id="imgDokumenFull" src="" alt="Dokumen Penuh" style="max-width: 100%; max-height: 75vh; border-radius: 12px; object-fit: contain; box-shadow: 0 4px 16px rgba(0,0,0,0.1);">
       </div>
-      <div class="modal-footer" style="justify-content: center;">
+      <div class="modal-footer" style="justify-content: center; gap: 10px;">
+        <a id="btnBukaDokumenTab" href="#" target="_blank" class="btn-outline-pill" style="font-size: 12px; padding: 6px 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          <span>Buka di Tab Baru / Unduh</span>
+        </a>
         <button type="button" class="btn-teal-pill btn-close-modal">Tutup</button>
       </div>
     </div>
@@ -1855,21 +1877,26 @@
     </div>
   </div>
 
-  <!-- Scripts -->
-  <script src="js/data.js"></script>
-  <script src="js/cloud-sync.js"></script>
-  <script src="js/report-pdf.js"></script>
-  <script src="js/app.js"></script>
+  <!-- Scripts with cache-busting -->
+  <script src="js/data.js?v=20261021_02"></script>
+  <script src="js/cloud-sync.js?v=20261021_02"></script>
+  <script src="js/report-pdf.js?v=20261021_02"></script>
+  <script src="js/app.js?v=20261021_02"></script>
 
   <script>
-    // Set default date picker values to today
-    document.addEventListener('DOMContentLoaded', () => {
+    // Set default date picker values to today (bulletproof ready check)
+    function initDatePickers() {
       const today = new Date().toISOString().slice(0, 10);
       const txTanggal = document.getElementById('txTanggal');
       const talanganTanggal = document.getElementById('talanganTanggal');
       if (txTanggal) txTanggal.value = today;
       if (talanganTanggal) talanganTanggal.value = today;
-    });
+    }
+    if (document.readyState !== 'loading') {
+      initDatePickers();
+    } else {
+      document.addEventListener('DOMContentLoaded', initDatePickers);
+    }
   </script>
 </body>
 </html>
